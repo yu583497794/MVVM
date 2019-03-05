@@ -4,13 +4,13 @@
 
 1. 改变待做项的状态\
 通过单击每项待做事件前端的圆圈可切换事件状态;
-![改变待做事件的状态](data\example.gif)
+![改变待做事件的状态](http://image.little-fairy.club/example.gif)
 2. 增加待做事件\
 通过在输入框中键入待做事件,以@开头作为截止时间,&开头作为共同参与事件的合作者;
-![增加待做事件](data\addTodo.gif)
+![增加待做事件](http://image.little-fairy.club/addTodo.gif)
 3. 删除待做事件\
 鼠标移动到所需删除事件项, 点击x键即可删除;
-![删除待做事件](data\del.gif)
+![删除待做事件](http://image.little-fairy.club/del.gif)
 
 ## MVVM模型
 
