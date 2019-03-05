@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>todo list</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" type="text/css" media="screen" href="css\main.css">
+  <script src="main.js"></script>
+</head>
+
+<body>
+  <div id="root">
+    <h1 class="title"  data-model="title"></h1>
+    <section class="real-app">
+      <input type="text" data-event="addTodoItem" class="add-input" autofocus="autofocus" placeholder="接下来做什么?">
+      <ul data-list="todos" class="todo-list">
+        <li data-list-item="todos" data-class="todos:done" class="todo-item">
+          <input type="checkbox" class="toggle" data-event="toggleState">
+          <div class="middle-section">
+            <label data-model="todos:content"></label>
+            <ul class="detail-panel">
+              <li class="detail-item">
+                <span class="detail-item-title">发起人</span>
+                <span class="detail-item-text" data-model="todos:creator"></span>
+              </li>
+              <li class="detail-item">
+                <span class="detail-item-title">截止期</span>
+                <span class="detail-item-text" data-model="todos:date"></span>
+              </li>
+              <li class="detail-item">
+                <span class="detail-item-title">合伙人</span>
+                <ul data-list="todos:members" class="member-list">
+                  <li data-list-item="todos:members" class="member-list-item">
+                    <span data-model="todos:members:name" class="detail-item-text"></span>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+          <button class="destroy" data-event="delItem"></button>
+        </li>
+      </ul>
+    </section>
+    <div data-model="user" id="user"></div>
+  </div>
+  <script>
+    let data = {
+      title: 'todo list',
+      user: 'Lucy',
+      todos: [{
+          unfold: false,
+          creator: 'Lucy',
+          content: 'write mvvm',
+          done: 'undone',
+          date: '2019-03-04',
+          members: [{
+            name: 'Micheal'
+          }, {
+            name: 'Jean'
+          }]
+        },
+        {
+          unfold: false,
+          creator: 'Lucy',
+          content: 'check mvvm',
+          done: 'undone',
+          date: '2019-03-04',
+          members: [{
+            name: 'Lily'
+          }]
+        }
+      ]
+    }
+
+    function parseTodo(str) {
+      let ret = {};
+      let todoRegExp = /[^\&\@]*/;
+      let dateRegExp = /\d{4}-\d{2}-\d{2}/;
+      let memberExp = /\&([^\@\&]*)/g;
+      if (dateRegExp.test(str)) {
+        ret.date = dateRegExp.exec(str)[0];
+      } else {
+        let d = new Date();
+        ret.date = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDay();
+      }
+      ret.members = [];
+      while (memberExp.exec(str)) {
+        ret.members.push({
+          name: RegExp.$1
+        });
+      }
+      if (!ret.members.length) {
+        ret.members.push({
+          name: '无'
+        });
+      }
+      ret.content = todoRegExp.exec(str)[0];
+      ret.creator = 'Lucy';
+      return ret;
+    }
+    const eventList = {
+      addTodoItem: {
+        type: 'keypress',
+        fn: function (event) {
+          if (this.value.length && event.keyCode === 13) {
+            data.todos.push(parseTodo(this.value));
+            this.value = '';
+          }
+        }
+      },
+      toggleState: {
+        type: 'click',
+        fn() {
+          data['todos'][this.path[0]].done = data['todos'][this.path[0]].done === 'done' ? 'undone' : 'done';
+        }
+      },
+      delItem: {
+        type: 'click',
+        fn(event) {
+          let index = this.path[0];
+          data.todos.splice(index, 1);
+        }
+      }
+    }
+
+    function scan(node) {
+      if (node.parentElement && node.parentElement.path) {
+        node.path = node.parentElement.path.slice();
+      }
+      if (!node.getAttribute("data-list")) {
+        // children 属性只返回元素节点, 而childNode返回所有的节点,包括文本节点,注释节点
+        for (let i = 0; i < node.children.length; i++) {
+          scan(node.children[i]);
+        }
+        parseModel(node);
+        parseClass(node);
+        parseEvent(node);
+      } else {
+        parseList(node);
+      }
+    }
+
+    function parseModel(node) {
+      // getAttribute() 方法返回指定属性名的属性值。
+      if (node.getAttribute("data-model")) {
+        const modelName = node.getAttribute("data-model");
+        const _data = parseData(modelName, node);
+        if (node.tagName === "INPUT") {
+          node.value = _data.data;
+        } else {
+          node.innerText = _data.data;
+        }
+        observe(data, _data.path, (old, now) => {
+          if (node.tagName === "INPUT") {
+            node.value = now;
+          } else {
+            node.innerText = now;
+          }
+        })
+      }
+    }
+
+    function parseClass(node) {
+      if (node.getAttribute("data-class")) {
+        const className = node.getAttribute("data-class");
+        const _data = parseData(className, node);
+        if (!node.classList.contains(_data.data)) {
+          // 绑定多个class? ...数组
+          node.classList.add(_data.data);
+        }
+        observe(data, _data.path, (old, now) => {
+          node.classList.remove(old);
+          node.classList.add(now);
+        })
+      }
+    }
+
+    function parseData(str, node) {
+      let _list = str.split(':')
+      let _data,
+        _path = 0;
+      let p = [];
+      _list.forEach((key, index) => {
+        if (index === 0) {
+          _data = data[key]
+          p.push(key)
+        } else {
+          _data = _data[key];
+          p.push(key);
+          // node.path[_path]为1时,返回1,if false 
+        }
+        if (Array.isArray(_data) && node.path && node.path[_path] > -1) {
+          p.push(node.path[_path]);
+          _data = _data[node.path[_path]];
+          _path++;
+        }
+      })
+      return {
+        path: p,
+        data: _data
+      }
+    }
+
+    function parseEvent(node) {
+      if (node.getAttribute("data-event")) {
+        const eventName = node.getAttribute("data-event");
+        node.addEventListener(eventList[eventName].type, eventList[eventName].fn.bind(node));
+      }
+    }
+
+    function parseList(node) {
+      const _item = parseListItem(node) // target
+      const _list = node.getAttribute('data-list')
+      const _listData = parseData(_list, node)
+      try {
+        _listData.data.forEach((_dataItem, index) => {
+          const _copyItem = _item.cloneNode(true) // target
+          if (node.path) {
+            _copyItem.path = node.path.slice()
+          }
+          if (!_copyItem.path) {
+            _copyItem.path = []
+          }
+          _copyItem.path.push(index)
+          scan(_copyItem)
+          node.insertBefore(_copyItem, _item) // 找到的data-list-item
+        })
+        node.removeChild(_item)
+      } catch (e) {
+        console.log(node);
+        console.log(_list);
+        console.log(_listData);
+        console.log(e);
+      }
+      observe(data, _listData.path, () => {
+        // 删除列表所有的节点
+        while (node.firstChild) {
+          node.removeChild(node.firstChild)
+        }
+        const _listData = parseData(_list, node)
+        _listData.data.forEach((_dataItem, index) => {
+          // 重新加入DOM树
+          node.appendChild(_item)
+          const _copyItem = _item.cloneNode(true)
+          if (node.path) {
+            _copyItem.path = node.path.slice()
+          }
+          if (!_copyItem.path) {
+            _copyItem.path = []
+          }
+          _copyItem.path.push(index)
+          scan(_copyItem)
+          node.insertBefore(_copyItem, _item)
+        })
+        // 再次移出DOM树
+        node.removeChild(_item)
+      })
+    }
+
+    function parseListItem(node) {
+      let target;
+      ! function getItem(node) {
+        for (let i = 0; i < node.children.length; i++) {
+          const _thisNode = node.children[i]
+          if (node.path) {
+            _thisNode.path = node.path.slice()
+          }
+          parseEvent(_thisNode)
+          parseClass(_thisNode)
+          parseModel(_thisNode)
+          if (_thisNode.getAttribute('data-list-item')) {
+            target = _thisNode
+          } else {
+            getItem(_thisNode)
+          }
+        }
+      }(node)
+      return target
+    }
+    // 对象中的对象
+    function observeAllKey(obj, callback) {
+      Object.keys(obj).forEach((key) => {
+        observe(obj, key, callback);
+      })
+    }
+    // 对象中的数组
+    function observeArray(arr, callback) {
+      const oam = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse'];
+      const arrayProto = Array.prototype;
+      // Object.create()方法创建一个新对象，使用现有的对象来提供新创建的对象的__proto__
+      const hackProto = Object.create(Array.prototype);
+      oam.forEach((method) => {
+        Object.defineProperty(hackProto, method, {
+          writable: true,
+          enumerable: true,
+          configurable: true,
+          value: function (...arg) {
+            let me = this;
+            let old = arr.slice();
+            let now = arrayProto[method].call(me, ...arg);
+            callback(old, me, ...arg);
+            return now;
+          }
+        })
+      })
+      arr.__proto__ = hackProto;
+    }
+    // 传入一个路径数组,来监听指定的对象数据
+    function observePath(obj, path, callback) {
+      let _path = obj;
+      path.forEach((p, index) => {
+        // 是数字
+        if (parseInt(p) == p) {
+          p = parseInt(p);
+        }
+        if (index < path.length - 1) {
+          // 沿着所给路径依次取得子object
+          _path = _path[p];
+        } else {
+          // 最后一个属性作为key, 前一个属性是该key所属的object
+          _key = p;
+        }
+      })
+      observe(_path, _key, callback);
+    }
+
+    function observe(obj, key, callback) {
+      // 路径
+      if (Object.prototype.toString.call(key) === '[object Array]') {
+        observePath(obj, key, callback);
+      } else {
+        let old = obj[key];
+        if (Object.prototype.toString.call(old) === '[object Array]') {
+          observeArray(old, callback);
+        } else if (Object.prototype.toString.call(old) === '[object Object]') {
+          observeAllKey(old, callback);
+        } else {
+          Object.defineProperty(obj, key, {
+            enumerable: true,
+            configurable: true,
+            get() {
+              return old;
+            },
+            set(now) {
+              if (now !== old) {
+                console.log(`${old} ---> ${now}`);
+                // old = now;
+                callback(old, now);
+              }
+              old = now;
+            }
+          })
+        }
+      }
+    }
+    let root = document.getElementById('root');
+    scan(root);
+  </script>
+</body>
+
+</html>
